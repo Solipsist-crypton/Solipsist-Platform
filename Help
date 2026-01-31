@@ -1,0 +1,5 @@
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/Solipsist-crypton/Solipsist-Platform.git
+git branch
+git push -u origin master
