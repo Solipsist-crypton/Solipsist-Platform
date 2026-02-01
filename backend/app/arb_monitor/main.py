@@ -1,127 +1,183 @@
 import time
-from exchanges import *
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from exchanges import EXCHANGES, get_all_binance_prices
 
-def load_coins(filename="coins.txt"):
-    """Завантажити список монет з файлу"""
+def load_coins(filename="backend/app/arb_monitor/coins.txt"):
     try:
         with open(filename, 'r') as f:
             coins = [line.strip() for line in f if line.strip()]
-        return coins
+        
+        # Фільтруємо проблемні монети
+        problematic = [
+            'MATICUSDT', 'EOSUSDT', 'FTMUSDT', 'KLAYUSDT', 'MKRUSDT',
+            'RNDRUSDT', 'AGIXUSDT', 'BTCBUSD', 'ETHBUSD', 'BNBBUSD',
+            'SOLBUSD', 'ADABUSD', 'XRPDUSD', 'LTCBUSD', 'ADAUSD',
+            'XRPUSD', 'LTCUSD'
+        ]
+        
+        filtered_coins = [c for c in coins if c not in problematic]
+        removed = len(coins) - len(filtered_coins)
+        
+        if removed > 0:
+            print(f"🗑️  Видалено {removed} проблемних монет")
+        
+        return filtered_coins[:100]  # Макс 100 монет
     except:
-        # Якщо файлу немає - стандартний список
         return ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
 
-def check_all_coins(coins):
-    """Перевірити всі монети на всіх біржах"""
-    results = {}
-    
-    print("🔍 ПЕРЕВІРКА МОНЕТ НА БІРЖАХ")
-    print("=" * 70)
-    print(f"{'МОНЕТА':<12} {'Binance':<12} {'Bybit':<12} {'KuCoin':<12} Статус")
-    print("-" * 70)
-    
-    for coin in coins:
-        # Отримуємо ціни
-        b_price = get_binance_price(coin)
-        y_price = get_bybit_price(coin)
-        k_price = get_kucoin_price(coin)
-        
-        # Статус доступності
-        status = []
-        if b_price: status.append("✅")
-        else: status.append("❌")
-        if y_price: status.append("✅")
-        else: status.append("❌")
-        if k_price: status.append("✅")
-        else: status.append("❌")
-        
-        # Виводимо результат
-        b_str = f"${b_price:,.2f}" if b_price else "---"
-        y_str = f"${y_price:,.2f}" if y_price else "---"
-        k_str = f"${k_price:,.2f}" if k_price else "---"
-        
-        print(f"{coin:<12} {b_str:<12} {y_str:<12} {k_str:<12} {' '.join(status)}")
-        
-        # Зберігаємо результати
-        results[coin] = {
-            'Binance': b_price,
-            'Bybit': y_price,
-            'KuCoin': k_price
-        }
-        
-        # Невелика затримка, щоб не заблокували
-        time.sleep(0.1)
-    
-    return results
+def format_price(price):
+    if price is None or price <= 0:
+        return "---"
+    price = float(price)
+    if price < 0.01: return f"${price:.6f}"
+    elif price < 1: return f"${price:.4f}"
+    elif price < 10: return f"${price:.4f}"
+    elif price < 1000: return f"${price:.2f}"
+    else: return f"${price:,.2f}"
 
-def show_statistics(results):
-    """Показати статистику"""
-    print("\n📊 СТАТИСТИКА:")
+def check_all_coins_optimized(coins, selected_exchanges):
+    """Оптимізована перевірка з кешуванням"""
+    
+    total_coins = len(coins)
+    total_exchanges = len(selected_exchanges)
+    
+    print(f"\n🚀 ОПТИМІЗОВАНА ПЕРЕВІРКА")
+    print(f"📊 {total_coins} монет на {total_exchanges} біржах")
+    print("=" * 60)
+    
+    results = {}
+    start_time = time.time()
+    
+    # КЕШУВАННЯ: Отримуємо всі ціни Binance одним запитом
+    print("🔍 Отримую всі ціни Binance...")
+    binance_cache = get_all_binance_prices()
+    binance_hits = 0
+    
+    if binance_cache:
+        print(f"✅ Отримано {len(binance_cache)} пар з Binance")
+    
+    # Функція для отримання ціни з кешу
+    def get_price_cached(coin, exchange):
+        if exchange == 'Binance' and binance_cache:
+            if coin in binance_cache:
+                return binance_cache[coin]
+        
+        # Для інших бірж - звичайний запит
+        func = EXCHANGES[exchange]
+        return func(coin)
+    
+    # Паралельна перевірка
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_pair = {}
+        
+        for coin in coins:
+            for exchange_name in selected_exchanges:
+                future = executor.submit(get_price_cached, coin, exchange_name)
+                future_to_pair[future] = (coin, exchange_name)
+        
+        # Обробка результатів
+        completed = 0
+        total_requests = len(future_to_pair)
+        
+        for future in as_completed(future_to_pair):
+            coin, exchange_name = future_to_pair[future]
+            
+            if coin not in results:
+                results[coin] = {}
+            
+            try:
+                price = future.result(timeout=5)
+                results[coin][exchange_name] = price
+                
+                # Лічильник кеш-хітів
+                if exchange_name == 'Binance' and price and coin in binance_cache:
+                    binance_hits += 1
+                    
+            except:
+                results[coin][exchange_name] = None
+            
+            completed += 1
+            if completed % 50 == 0:
+                elapsed = time.time() - start_time
+                speed = completed / elapsed if elapsed > 0 else 0
+                print(f"  {completed}/{total_requests} | {speed:.0f} з/сек")
+    
+    elapsed = time.time() - start_time
+    
+    if binance_cache:
+        hit_rate = (binance_hits / total_coins) * 100
+        print(f"🎯 Binance кеш: {binance_hits}/{total_coins} ({hit_rate:.1f}%)")
+    
+    print(f"\n✅ Готово за {elapsed:.1f} сек ({total_coins/elapsed:.1f} монет/сек)")
+    
+    return results, selected_exchanges
+
+def show_results_compact(results, coins, exchanges):
+    """Компактний вивід результатів"""
+    print(f"\n📋 РЕЗУЛЬТАТИ ({len(coins)} монет, {len(exchanges)} бірж):")
     print("=" * 70)
     
-    total_coins = len(results)
+    # Тільки перші 15 монет для компактності
+    display_coins = coins[:15]
     
-    # Підрахунок доступності
-    available_on = {
-        'Binance': 0,
-        'Bybit': 0,
-        'KuCoin': 0,
-        'All': 0,
-        'None': 0
-    }
+    for coin in display_coins:
+        if coin in results:
+            row = f"{coin:<12}"
+            success_count = 0
+            
+            for exchange_name in exchanges:
+                price = results[coin].get(exchange_name)
+                if price and price > 0:
+                    row += " ✓"
+                    success_count += 1
+                else:
+                    row += " ✗"
+            
+            row += f" {success_count}/{len(exchanges)}"
+            print(row)
     
-    for coin, prices in results.items():
-        # Рахуємо для кожної біржі
-        if prices['Binance']: available_on['Binance'] += 1
-        if prices['Bybit']: available_on['Bybit'] += 1
-        if prices['KuCoin']: available_on['KuCoin'] += 1
-        
-        # Рахуємо загальну доступність
-        available_count = sum(1 for price in prices.values() if price)
-        if available_count == 3:
-            available_on['All'] += 1
-        elif available_count == 0:
-            available_on['None'] += 1
-    
-    # Виводимо статистику
-    print(f"Усього монет: {total_coins}")
-    print(f"\nДоступність:")
-    print(f"  Binance:  {available_on['Binance']}/{total_coins} ({available_on['Binance']/total_coins*100:.1f}%)")
-    print(f"  Bybit:    {available_on['Bybit']}/{total_coins} ({available_on['Bybit']/total_coins*100:.1f}%)")
-    print(f"  KuCoin:   {available_on['KuCoin']}/{total_coins} ({available_on['KuCoin']/total_coins*100:.1f}%)")
-    print(f"\nНа всіх 3 біржах: {available_on['All']}")
-    print(f"Не на жодній:    {available_on['None']}")
-    
-    # Показуємо монети, які не знайдені
-    not_found = [coin for coin, prices in results.items() 
-                 if not any(prices.values())]
-    
-    if not_found:
-        print(f"\n⚠️  Не знайдені: {', '.join(not_found)}")
+    if len(coins) > 15:
+        print(f"\n... і ще {len(coins) - 15} монет")
 
 def main():
-    # Завантажуємо монети
+    print("🎯 ТЕСТ ПОКРИТТЯ КРИПТОМОНЕТ (ОПТИМІЗОВАНИЙ)")
+    print("=" * 50)
+    
+    # Завантажити монети
     coins = load_coins()
-    print(f"📋 Завантажено {len(coins)} монет для перевірки")
+    print(f"📋 Монет для тесту: {len(coins)}")
     
-    # Перевіряємо
-    results = check_all_coins(coins)
+    # Тільки працюючі біржі
+    selected = ['Binance', 'Coinex', 'Gate.io', 'HTX', 'MEXC', 'KuCoin', 'Bybit', 'Kraken']
+    print(f"🎯 Бірж: {len(selected)}")
     
-    # Показуємо статистику
-    show_statistics(results)
+    # Запустити перевірку
+    results, exchanges = check_all_coins_optimized(coins, selected)
     
-    # Записуємо результати в файл
-    with open("results.txt", "w") as f:
-        f.write("Результати перевірки монет\n")
-        f.write("=" * 50 + "\n")
-        for coin, prices in results.items():
-            f.write(f"{coin}:\n")
-            f.write(f"  Binance:  {prices['Binance'] or 'N/A'}\n")
-            f.write(f"  Bybit:    {prices['Bybit'] or 'N/A'}\n")
-            f.write(f"  KuCoin:   {prices['KuCoin'] or 'N/A'}\n\n")
+    # Статистика
+    print(f"\n📊 СТАТИСТИКА ПОКРИТТЯ:")
+    print("=" * 40)
     
-    print(f"\n💾 Результати збережено в results.txt")
+    for exchange in exchanges:
+        available = sum(1 for coin in coins 
+                       if coin in results and results[coin].get(exchange) and results[coin][exchange] > 0)
+        percent = (available / len(coins)) * 100
+        print(f"{exchange:<12} {available:>3}/{len(coins)} ({percent:>5.1f}%)")
+    
+    # Загальне покриття
+    print(f"\n📈 ЗАГАЛЬНЕ ПОКРИТТЯ:")
+    total_success = 0
+    total_possible = len(coins) * len(exchanges)
+    
+    for coin in coins:
+        if coin in results:
+            total_success += sum(1 for ex in exchanges if results[coin].get(ex))
+    
+    coverage_percent = (total_success / total_possible) * 100
+    print(f"Успішних запитів: {total_success}/{total_possible} ({coverage_percent:.1f}%)")
+    
+    # Показати компактні результати
+    show_results_compact(results, coins, exchanges)
 
-# Запуск
 if __name__ == "__main__":
     main()
