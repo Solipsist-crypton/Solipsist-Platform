@@ -1,0 +1,38 @@
+{
+  "name": "solipsist-platform",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dev": "concurrently \"npm run start\" \"python src/python/api_bridge.py\""
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chart.js": "^4.4.0"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "concurrently": "^8.2.2",
+    "electron-reload": "^1.5.0"
+  },
+  "build": {
+    "appId": "com.solipsist.platform",
+    "productName": "Solipsist Platform",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!src/python/__pycache__/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/python",
+        "to": "python",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}

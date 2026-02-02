@@ -112,13 +112,15 @@ def analyze_arbitrage_fast():
     else:
         print("⚠️  АРБІТРАЖНИХ МОЖЛИВОСТЕЙ НЕ ЗНАЙДЕНО")
 
+
+
 def analyze_single_pair(pair, all_data):
     """Аналіз однієї пари"""
     prices = {}
     volumes = {}
     
     for exchange, data in all_data.items():
-        # Визначаємо ключ
+        # Визначаємо ключ для цієї біржі
         if exchange == 'Gate.io':
             key = pair.replace('USDT', '_USDT')
         elif exchange == 'HTX':
@@ -126,45 +128,80 @@ def analyze_single_pair(pair, all_data):
         else:
             key = pair
         
-        if key in data:
-            prices[exchange] = data[key]['price']
+        # Перевіряємо, чи є ця пара на біржі
+        if key not in data:
+            continue
+        
+        price = data[key].get('price', 0)
+        if price <= 0:  # Ігноруємо нульові ціни
+            continue
             
-            # Об'єм у USDT
-            if exchange == 'Binance':
-                volumes[exchange] = data[key]['volume']
-            elif exchange == 'Bybit':
-                volumes[exchange] = data[key]['volume24h']
-            elif exchange == 'MEXC':
-                volumes[exchange] = data[key]['volume']
-            elif exchange == 'Gate.io':
-                volumes[exchange] = data[key]['quote_volume']
-            elif exchange == 'HTX':
-                volumes[exchange] = data[key]['vol']
+        prices[exchange] = price
+        
+        # КОРЕКТНО отримуємо об'єм у USDT
+        if exchange == 'Binance':
+            # 'volume' - це об'єм у USDT
+            volumes[exchange] = data[key].get('volume', 0)
+        
+        elif exchange == 'Bybit':
+            # 'volume24h' - це об'єм у USDT
+            volumes[exchange] = data[key].get('volume24h', 0)
+        
+        elif exchange == 'MEXC':
+            # 'volume' - це об'єм у USDT
+            volumes[exchange] = data[key].get('volume', 0)
+        
+        elif exchange == 'Gate.io':
+            # 'quote_volume' - це об'єм у USDT
+            volumes[exchange] = data[key].get('quote_volume', 0)
+        
+        elif exchange == 'HTX':
+            # 'vol' - об'єм у БАЗОВІЙ валюті! Потрібно конвертувати
+            vol_base = data[key].get('vol', 0)  # Наприклад, 100 BTC
+            # Конвертуємо в USDT: об'єм_базова × ціна
+            volumes[exchange] = vol_base * price if price > 0 else 0
     
-    # Перевірка
-    if len(prices) >= 3:
-        min_ex = min(prices, key=prices.get)
-        max_ex = max(prices, key=prices.get)
-        
-        min_price = prices[min_ex]
-        max_price = prices[max_ex]
-        min_volume = volumes.get(min_ex, 0)
-        max_volume = volumes.get(max_ex, 0)
-        
-        spread = ((max_price - min_price) / min_price) * 100
-        
-        if spread > 0.05 and min_volume > 100000 and max_volume > 100000:
-            return {
-                'pair': pair,
-                'spread': spread,
-                'buy': min_ex,
-                'sell': max_ex,
-                'buy_price': min_price,
-                'sell_price': max_price,
-                'buy_volume': min_volume,
-                'sell_volume': max_volume,
-                'exchanges': len(prices)
-            }
+    # КРИТИЧНО: потрібно МІНІМУМ 3 біржі з цією парою
+    if len(prices) < 3:
+        return None
+    
+    # Перевіряємо, чи ціни не абсурдно відрізняються (різниця одиниць)
+    price_values = list(prices.values())
+    max_price = max(price_values)
+    min_price = min(price_values)
+    
+    # Якщо різниця більше 1000 разів - швидше за все, помилка в одиницях
+    if max_price / min_price > 1000 and min_price > 0:
+        print(f"⚠️  Підозріла пара {pair}: {prices}")
+        return None
+    
+    # Знаходимо найдешевшу та найдорожчу біржі
+    min_ex = min(prices, key=prices.get)
+    max_ex = max(prices, key=prices.get)
+    
+    min_volume = volumes.get(min_ex, 0)
+    max_volume = volumes.get(max_ex, 0)
+    
+    # Розраховуємо спред
+    spread = ((max_price - min_price) / min_price) * 100 if min_price > 0 else 0
+    # ========== ДОДАЄМО НОВИЙ ФІЛЬТР ==========
+    # Фільтр за спредом: 1% < spread < 100%
+    if spread <= 1 or spread >= 100:
+        return None  # Пропускаємо занадто малі або абсурдно великі спреди
+    # ===========================================
+    # Застосовуємо фільтри
+    if  min_volume > 100000 and max_volume > 100000:
+        return {
+            'pair': pair,
+            'spread': spread,
+            'buy': min_ex,
+            'sell': max_ex,
+            'buy_price': min_price,
+            'sell_price': max_price,
+            'buy_volume': min_volume,
+            'sell_volume': max_volume,
+            'exchanges': len(prices)
+        }
     
     return None
 

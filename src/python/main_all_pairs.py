@@ -1,6 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from exchanges_all import ALL_EXCHANGES_FAST
+from src.python.exchanges_all import ALL_EXCHANGES_FAST
 
 def get_all_prices_fast():
     """Отримати всі ціни з 5 бірж швидко"""

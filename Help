@@ -3,3 +3,14 @@ git commit -m "Initial commit"
 git remote add origin https://github.com/Solipsist-crypton/Solipsist-Platform.git
 git branch
 git push -u origin master
+# 2. Встанови Node.js залежності
+npm install
+
+# 3. Встанови Python залежності
+pip install -r requirements.txt
+
+# 4. Запуск у режимі розробки
+npm run dev
+
+# 5. Збірка додатку
+npm run build
