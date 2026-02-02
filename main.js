@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const isDev = !app.isPackaged;
-
+const fetch = require('node-fetch');
 let mainWindow;
 let pythonProcess;
 
@@ -110,7 +110,21 @@ function createMenu() {
 
 // Обробники IPC
 ipcMain.handle('get-arbitrage', async () => {
-  return await fetchPythonAPI('/arbitrage');
+    try {
+        const response = await fetch('http://localhost:5000/arbitrage');
+        return await response.json();
+    } catch (error) {
+        return { error: error.message };
+    }
+});
+ipcMain.handle('save-config', async (event, config) => {
+    // Зберегти конфігурацію
+    return { status: 'saved' };
+});
+
+ipcMain.handle('load-config', async () => {
+    // Завантажити конфігурацію
+    return { theme: 'dark' };
 });
 
 ipcMain.handle('update-arbitrage', async () => {

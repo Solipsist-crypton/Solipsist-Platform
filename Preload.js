@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
   showNotification: (title, body) => 
     ipcRenderer.invoke('show-notification', { title, body })
+  
 });

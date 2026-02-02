@@ -27,12 +27,12 @@ def get_all_data_with_volumes():
     
     return results
 
-def analyze_arbitrage_fast():
+def analyze_arbitrage_fast(json_output=False):
     """Аналіз арбітражу - швидка версія"""
-    # 1. Завантажити БІЛЬШЕ пар (100 замість 30)
+    # 1. Завантажити пари
     try:
         with open("pairs_3plus_of_5.txt", "r") as f:
-            pairs = [line.strip() for line in f if line.strip() and not line.startswith('#')]  # ← 100 пар
+            pairs = [line.strip() for line in f if line.strip() and not line.startswith('#')]
         print(f"📋 Аналіз {len(pairs)} пар (3+ біржі)")
     except:
         pairs = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT']
@@ -71,7 +71,23 @@ def analyze_arbitrage_fast():
     # 4. Сортування
     opportunities.sort(key=lambda x: x['spread'], reverse=True)
     
-    # 5. Результати
+    # 🔴 Якщо потрібен JSON для API - повертаємо дані одразу
+    if json_output:
+        avg_spread = sum(o['spread'] for o in opportunities) / len(opportunities) if opportunities else 0
+        max_spread = opportunities[0]['spread'] if opportunities else 0
+        
+        return {
+            'opportunities': opportunities,
+            'stats': {
+                'total_pairs': len(pairs),
+                'found_opportunities': len(opportunities),
+                'avg_spread': avg_spread,
+                'max_spread': max_spread,
+                'timestamp': time.time()
+            }
+        }
+    
+    # 5. Результати (тільки якщо не json_output)
     print(f"\n💎 РЕЗУЛЬТАТИ АРБІТРАЖУ:")
     print("=" * 100)
     
@@ -82,7 +98,8 @@ def analyze_arbitrage_fast():
         print(f"{'ПАРА':<10} {'СПРЕД':<8} {'КУПИТИ':<10} {'ПРОДАВ.':<10} {'ЦІНА':<25} {'ОБЄМ':<20}")
         print("-" * 100)
         
-        for opp in opportunities:
+        # Показуємо тільки перші 15
+        for opp in opportunities[:15]:
             # Форматуємо ціну
             if opp['buy_price'] < 0.01:
                 price_str = f"${opp['buy_price']:.8f}→${opp['sell_price']:.8f}"
@@ -136,41 +153,46 @@ def analyze_single_pair(pair, all_data):
         if price <= 0:  # Ігноруємо нульові ціни
             continue
             
+        # 🔴 ФІКС для MEXC: якщо ціна < 0.001 - можливо це центи
+        if exchange == 'MEXC' and price < 0.001:
+            # Перевіряємо інші біржі
+            other_prices = []
+            for ex in ['Binance', 'Bybit', 'Gate.io']:
+                other_key = pair.replace('USDT', '_USDT') if ex == 'Gate.io' else pair
+                if other_key in all_data.get(ex, {}):
+                    other_price = all_data[ex][other_key].get('price', 0)
+                    if other_price > 0.01:  # Інші біржі показують нормальну ціну
+                        other_prices.append(other_price)
+            
+            if other_prices and min(other_prices) > 0.01:
+                # MEXC показує центи - конвертуємо в долари
+                price = price * 100
+                print(f"🔧 Виправлено MEXC {pair}: {price/100:.6f} → {price:.6f}")
+            
         prices[exchange] = price
         
         # КОРЕКТНО отримуємо об'єм у USDT
         if exchange == 'Binance':
-            # 'volume' - це об'єм у USDT
             volumes[exchange] = data[key].get('volume', 0)
-        
         elif exchange == 'Bybit':
-            # 'volume24h' - це об'єм у USDT
             volumes[exchange] = data[key].get('volume24h', 0)
-        
         elif exchange == 'MEXC':
-            # 'volume' - це об'єм у USDT
             volumes[exchange] = data[key].get('volume', 0)
-        
         elif exchange == 'Gate.io':
-            # 'quote_volume' - це об'єм у USDT
             volumes[exchange] = data[key].get('quote_volume', 0)
-        
         elif exchange == 'HTX':
-            # 'vol' - об'єм у БАЗОВІЙ валюті! Потрібно конвертувати
-            vol_base = data[key].get('vol', 0)  # Наприклад, 100 BTC
-            # Конвертуємо в USDT: об'єм_базова × ціна
+            vol_base = data[key].get('vol', 0)
             volumes[exchange] = vol_base * price if price > 0 else 0
     
     # КРИТИЧНО: потрібно МІНІМУМ 3 біржі з цією парою
     if len(prices) < 3:
         return None
     
-    # Перевіряємо, чи ціни не абсурдно відрізняються (різниця одиниць)
+    # Перевіряємо, чи ціни не абсурдно відрізняються
     price_values = list(prices.values())
     max_price = max(price_values)
     min_price = min(price_values)
     
-    # Якщо різниця більше 1000 разів - швидше за все, помилка в одиницях
     if max_price / min_price > 1000 and min_price > 0:
         print(f"⚠️  Підозріла пара {pair}: {prices}")
         return None
@@ -184,13 +206,13 @@ def analyze_single_pair(pair, all_data):
     
     # Розраховуємо спред
     spread = ((max_price - min_price) / min_price) * 100 if min_price > 0 else 0
-    # ========== ДОДАЄМО НОВИЙ ФІЛЬТР ==========
+    
     # Фільтр за спредом: 1% < spread < 100%
     if spread <= 1 or spread >= 100:
-        return None  # Пропускаємо занадто малі або абсурдно великі спреди
-    # ===========================================
-    # Застосовуємо фільтри
-    if  min_volume > 100000 and max_volume > 100000:
+        return None
+    
+    # Фільтр за об'ємом
+    if min_volume > 100000 and max_volume > 100000:
         return {
             'pair': pair,
             'spread': spread,
@@ -211,7 +233,13 @@ def main():
     print("📌 Фільтри: спред >0.05%, об'єм >$100K, мінімум 3 біржі")
     print()
     
-    analyze_arbitrage_fast()
+    # Запуск в звичайному режимі (консоль)
+    analyze_arbitrage_fast(json_output=False)
+
+# Додаткова функція для API
+def get_arbitrage_for_api():
+    """Отримати арбітраж для API"""
+    return analyze_arbitrage_fast(json_output=True)
 
 if __name__ == "__main__":
     main()

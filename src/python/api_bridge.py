@@ -3,13 +3,18 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import subprocess
 import json
+import sys
+import io
 import time
 import threading
-from arbitrage_volume import analyze_arbitrage_fast, get_all_data_with_volumes
+from arbitrage_volume import get_arbitrage_for_api, get_all_data_with_volumes
 from exchanges_all import ALL_EXCHANGES
 
 app = Flask(__name__)
 CORS(app)
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Кешовані дані
 cache = {
@@ -24,16 +29,9 @@ def health():
 
 @app.route('/arbitrage')
 def get_arbitrage():
-    """Отримати арбітражні можливості"""
-    # Перевірка кешу (30 секунд)
-    if (cache['arbitrage'] and 
-        time.time() - cache['last_update'] < 30 and
-        not request.args.get('force')):
-        return jsonify(cache['arbitrage'])
-    
     try:
-        # Викликаємо твою логіку
-        result = analyze_arbitrage_fast(json_output=True)
+        # Використовуй нову функцію
+        result = get_arbitrage_for_api()  # або analyze_arbitrage_fast(json_output=True)
         cache['arbitrage'] = result
         cache['last_update'] = time.time()
         return jsonify(result)
@@ -44,7 +42,9 @@ def get_arbitrage():
 def update_arbitrage():
     """Примусове оновлення арбітражу"""
     try:
-        result = analyze_arbitrage_fast(json_output=True)
+        # НА ЦЕЙ:
+        result = get_arbitrage_for_api()  # або analyze_arbitrage_fast(json_output=True), якщо додав параметр
+        
         cache['arbitrage'] = result
         cache['last_update'] = time.time()
         return jsonify({'status': 'updated', 'data': result})
