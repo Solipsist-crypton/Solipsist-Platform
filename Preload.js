@@ -1,4 +1,3 @@
-// preload.js
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -20,23 +19,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Додатково
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
-  showNotification: (title, body) => 
-    ipcRenderer.invoke('show-notification', { title, body }),
-
-
-  // Методи для скальпера
+  
+  // МЕТОДИ ДЛЯ СКАЛЬПЕРА
   startScalper: () => ipcRenderer.invoke('scalper-start'),
   stopScalper: () => ipcRenderer.invoke('scalper-stop'),
   getScalperStatus: () => ipcRenderer.invoke('scalper-status'),
-    
-  // Універсальний метод для запитів до Python API
-  fetchPythonAPI: (endpoint, options) => 
-      ipcRenderer.invoke('fetch-python-api', endpoint, options),
-    
-  // Сповіщення
-  showNotification: (title, body) => 
-      ipcRenderer.invoke('show-notification', title, body)
-
-
   
+  // Універсальний метод для запитів до Python API (для скальпера)
+  fetchPythonAPI: (endpoint, options) => 
+    ipcRenderer.invoke('fetch-python-api', endpoint, options),
+  
+  // АБО спеціальний метод для скальпера
+  fetchScalperAPI: (endpoint, method = 'GET', data = null) => 
+    ipcRenderer.invoke('fetch-scalper-api', endpoint, method, data),
+  
+  // Сповіщення (ТІЛЬКИ ОДИН РАЗ!)
+  showNotification: (title, body) => 
+    ipcRenderer.invoke('show-notification', title, body)
 });

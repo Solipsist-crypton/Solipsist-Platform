@@ -1,14 +1,18 @@
-# src/python/scalper.py - СПРОЩЕНА ВЕРСІЯ
+# src/python/scalper.py - ТІЛЬКИ КЛАСИ (без Flask)
+
 import time
 import json
 import logging
 import requests
+import threading
 from datetime import datetime
 from collections import deque
 
+# Налаштування логування
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ========== КЛАС КЛІЄНТА BINANCE ==========
 class SimpleBinanceClient:
     """Простий клієнт для Binance API"""
     
@@ -57,6 +61,7 @@ class SimpleBinanceClient:
             logger.error(f"Помилка історичних даних: {e}")
             return []
 
+# ========== КЛАС СТРАТЕГІЇ ==========
 class EMAScalperSimple:
     """Спрощена стратегія скальпінга"""
     
@@ -71,9 +76,11 @@ class EMAScalperSimple:
         # Стан стратегії
         self.position = None  # 'LONG', 'SHORT', або None
         self.entry_price = 0
-        self.equity = 1000
+        self.equity = 1000.0
         self.trades = []
         self.signals = []
+        self.running = False
+        self.stream_thread = None
         
         # Налаштування (з TradingView)
         self.fast_period = 5
@@ -107,11 +114,13 @@ class EMAScalperSimple:
             
             # Перевіряємо, чи достатньо даних
             if len(self.prices) < self.slow_period * 2:
+                logger.debug(f"Недостатньо даних: {len(self.prices)}/{self.slow_period*2}")
                 return False
             
             # Розрахунок EMA
-            fast_ema = self.calculate_ema(list(self.prices)[-self.fast_period*2:], self.fast_period)
-            slow_ema = self.calculate_ema(list(self.prices)[-self.slow_period*2:], self.slow_period)
+            recent_prices = list(self.prices)
+            fast_ema = self.calculate_ema(recent_prices[-self.fast_period*2:], self.fast_period)
+            slow_ema = self.calculate_ema(recent_prices[-self.slow_period*2:], self.slow_period)
             
             if fast_ema is None or slow_ema is None:
                 return False
@@ -119,12 +128,10 @@ class EMAScalperSimple:
             # Визначення сигналів
             signal = None
             
-            if fast_ema > slow_ema:
-                if self.position == 'SHORT' or self.position is None:
-                    signal = 'BUY'
-            elif fast_ema < slow_ema:
-                if self.position == 'LONG' or self.position is None:
-                    signal = 'SELL'
+            if fast_ema > slow_ema and (self.position is None or self.position == 'SHORT'):
+                signal = 'BUY'
+            elif fast_ema < slow_ema and (self.position is None or self.position == 'LONG'):
+                signal = 'SELL'
             
             # Обробка сигналу
             if signal:
@@ -194,19 +201,52 @@ class EMAScalperSimple:
         self.position = None
         self.entry_price = 0
     
+    def start_stream(self):
+        """Запустити потік даних"""
+        if self.running:
+            return True
+        
+        self.running = True
+        
+        def stream_loop():
+            logger.info("Запуск потоку даних...")
+            while self.running:
+                try:
+                    if self.update_price():
+                        logger.debug("Оновлення ціни успішне")
+                    time.sleep(2)  # Оновлюємо кожні 2 секунди
+                except Exception as e:
+                    logger.error(f"Помилка в потоці: {e}")
+                    time.sleep(5)
+        
+        self.stream_thread = threading.Thread(target=stream_loop, daemon=True)
+        self.stream_thread.start()
+        return True
+    
+    def stop_stream(self):
+        """Зупинити потік даних"""
+        self.running = False
+        if self.stream_thread:
+            self.stream_thread.join(timeout=5)
+        logger.info("Потік даних зупинено")
+    
     def get_status(self):
         """Отримати статус"""
+        winning = sum(1 for trade in self.trades if 'profit' in trade and trade['profit'] > 0)
+        losing = len(self.trades) - winning
+        win_rate = (winning / len(self.trades) * 100) if self.trades else 0
+        
         return {
-            'running': True,
+            'running': self.running,
             'position': self.position,
             'entry_price': self.entry_price,
             'equity': round(self.equity, 2),
             'total_signals': len(self.signals),
             'total_trades': len(self.trades),
-            'win_rate': 50,  # Просте значення
+            'win_rate': round(win_rate, 1),
             'performance': {
-                'winning_trades': len(self.trades) // 2,
-                'losing_trades': len(self.trades) // 2
+                'winning_trades': winning,
+                'losing_trades': losing
             }
         }
     
@@ -220,18 +260,43 @@ class EMAScalperSimple:
     
     def reset(self):
         """Скинути стратегію"""
+        self.stop_stream()
         self.position = None
         self.entry_price = 0
-        self.equity = 1000
+        self.equity = 1000.0
         self.trades = []
         self.signals = []
         self.prices.clear()
         self.closes.clear()
         logger.info("Стратегію скинуто")
 
-# Глобальний екземпляр
-scalper_instance = EMAScalperSimple()
+# Глобальний екземпляр для імпорту
+# Цей екземпляр буде використовуватися в api_bridge.py
+_scalper_instance = None
 
-def init_scalper():
-    """Ініціалізація"""
-    return scalper_instance
+def get_scalper_instance():
+    """Отримати глобальний екземпляр скальпера"""
+    global _scalper_instance
+    if _scalper_instance is None:
+        _scalper_instance = EMAScalperSimple()
+        print("✅ Глобальний скальпер створено")
+    return _scalper_instance
+
+# ========== ТЕСТОВИЙ ЗАПУСК (якщо запускати окремо) ==========
+if __name__ == '__main__':
+    print("=" * 50)
+    print("🧪 Тестування класу скальпера")
+    print("=" * 50)
+    
+    scalper = EMAScalperSimple()
+    
+    # Тест отримання ціни
+    price = scalper.client.get_current_price()
+    print(f"💰 Поточна ціна SOL: {price:.4f} USDT" if price else "❌ Не вдалося отримати ціну")
+    
+    # Тест отримання свічок
+    candles = scalper.get_candles(limit=5)
+    print(f"📊 Отримано {len(candles)} свічок")
+    
+    print("✅ Тестування завершено. Клас готовий до використання.")
+    print("ℹ️ Запускайте через api_bridge.py для повної функціональності")

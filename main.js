@@ -54,21 +54,33 @@ function createWindow() {
 // Запуск Python
 function startPythonBackend() {
   const pythonPath = isDev 
-    ? path.join(__dirname, 'src/python/api_bridge.py')
+    ? path.join(__dirname, 'src/python/api_bridge.py')  // ← НОВИЙ ФАЙЛ
     : path.join(process.resourcesPath, 'python/api_bridge.py');
   
-  pythonProcess = spawn('python', [pythonPath]);
+  console.log(`🚀 Запуск Python: ${pythonPath}`);
+  
+  pythonProcess = spawn('python', [pythonPath], {
+    cwd: path.dirname(pythonPath),  // ← ВАЖЛИВО! Робоча директорія
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: '1',
+      PYTHONPATH: `${path.dirname(pythonPath)};${process.env.PYTHONPATH || ''}`
+    }
+  });
   
   pythonProcess.stdout.on('data', (data) => {
-    console.log(`Python: ${data}`);
+    const output = data.toString().trim();
+    if (output) console.log(`[Python] ${output}`);
   });
   
   pythonProcess.stderr.on('data', (data) => {
-    console.error(`Python Error: ${data}`);
+    const error = data.toString().trim();
+    if (error) console.error(`[Python ERROR] ${error}`);
   });
   
   pythonProcess.on('close', (code) => {
-    console.log(`Python process exited with code ${code}`);
+    console.log(`[Python] Процес завершено з кодом ${code}`);
   });
 }
 
@@ -200,7 +212,35 @@ ipcMain.handle('scalper-status', async () => {
     }
 });
 
+ipcMain.handle('scalper-test', async () => {
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/scalper/test');
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
 
+ipcMain.handle('scalper-reset', async () => {
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/scalper/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
+
+ipcMain.handle('scalper-signals', async (event, limit = 10) => {
+    try {
+        const response = await fetch(`http://127.0.0.1:5000/api/scalper/signals?limit=${limit}`);
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
 
 // Функція для запитів до Python API
 async function fetchPythonAPI(endpoint, options = {}) {
