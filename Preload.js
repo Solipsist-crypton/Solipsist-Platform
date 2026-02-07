@@ -21,6 +21,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Додатково
   openUrl: (url) => ipcRenderer.invoke('open-url', url),
   showNotification: (title, body) => 
-    ipcRenderer.invoke('show-notification', { title, body })
+    ipcRenderer.invoke('show-notification', { title, body }),
+
+
+  // Методи для скальпера
+  startScalper: () => ipcRenderer.invoke('scalper-start'),
+  stopScalper: () => ipcRenderer.invoke('scalper-stop'),
+  getScalperStatus: () => ipcRenderer.invoke('scalper-status'),
+    
+  // Універсальний метод для запитів до Python API
+  fetchPythonAPI: (endpoint, options) => 
+      ipcRenderer.invoke('fetch-python-api', endpoint, options),
+    
+  // Сповіщення
+  showNotification: (title, body) => 
+      ipcRenderer.invoke('show-notification', title, body)
+
+
   
 });

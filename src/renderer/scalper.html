@@ -1,0 +1,299 @@
+<!-- src/renderer/scalper.html - СПРОЩЕНА ВЕРСІЯ -->
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Скальпер SOL | Solipsist Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .title {
+            color: #60a5fa;
+            font-size: 1.5em;
+        }
+        
+        .badge {
+            background: #3b82f6;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-start {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-stop {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-reset {
+            background: #64748b;
+            color: white;
+        }
+        
+        .status {
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .status-online {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+        
+        .status-offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .positive {
+            color: #10b981;
+        }
+        
+        .negative {
+            color: #ef4444;
+        }
+        
+        .panel {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .panel-title {
+            color: #60a5fa;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .position-type {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-left: auto;
+        }
+        
+        .position-long {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+        
+        .position-short {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        
+        .position-none {
+            background: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+        }
+        
+        .signals-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .signal-item {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 4px solid;
+        }
+        
+        .signal-buy {
+            background: rgba(16, 185, 129, 0.1);
+            border-left-color: #10b981;
+        }
+        
+        .signal-sell {
+            background: rgba(239, 68, 68, 0.1);
+            border-left-color: #ef4444;
+        }
+        
+        .log {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .log-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #334155;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Шапка -->
+        <div class="header">
+            <div>
+                <span class="title">
+                    <i class="fas fa-bolt"></i> Скальпер SOL/USDT
+                </span>
+                <span class="badge">1M | EMA 5/13</span>
+            </div>
+            
+            <div class="controls">
+                <button id="btnStart" class="btn btn-start">
+                    <i class="fas fa-play"></i> Старт
+                </button>
+                <button id="btnStop" class="btn btn-stop" disabled>
+                    <i class="fas fa-stop"></i> Стоп
+                </button>
+                <button id="btnReset" class="btn btn-reset">
+                    <i class="fas fa-redo"></i> Скинути
+                </button>
+                <div id="statusIndicator" class="status status-offline">
+                    <i class="fas fa-circle"></i> Офлайн
+                </div>
+            </div>
+        </div>
+        
+        <!-- Статистика -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Баланс</div>
+                <div id="statEquity" class="stat-value">$1,000.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Сигналів</div>
+                <div id="statSignals" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Win Rate</div>
+                <div id="statWinRate" class="stat-value">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Позиція</div>
+                <div id="statPosition" class="stat-value">Немає</div>
+            </div>
+        </div>
+        
+        <!-- Панель позиції -->
+        <div class="panel">
+            <div class="panel-title">
+                <i class="fas fa-chart-line"></i> Поточна позиція
+                <div id="positionType" class="position-type position-none">Немає</div>
+            </div>
+            <div id="positionDetails">
+                <p style="color: #94a3b8; text-align: center; padding: 10px;">
+                    Позиція не відкрита
+                </p>
+            </div>
+        </div>
+        
+        <!-- Останні сигнали -->
+        <div class="panel">
+            <div class="panel-title">
+                <i class="fas fa-bell"></i> Останні сигнали
+            </div>
+            <div id="signalsList" class="signals-list">
+                <p style="color: #94a3b8; text-align: center; padding: 20px;">
+                    Сигнали з'являться після запуску
+                </p>
+            </div>
+        </div>
+        
+        <!-- Лог подій -->
+        <div class="panel">
+            <div class="panel-title">
+                <i class="fas fa-terminal"></i> Лог подій
+            </div>
+            <div id="eventLog" class="log">
+                <!-- Лог буде тут -->
+            </div>
+        </div>
+    </div>
+    
+    <script src="scalper.js"></script>
+</body>
+</html>

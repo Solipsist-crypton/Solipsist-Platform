@@ -15,3 +15,5 @@ npm run dev
 
 # 5. Збірка додатку
 npm run build
+
+python api_bridge.py

@@ -6,6 +6,22 @@ const isDev = !app.isPackaged;
 const fetch = require('node-fetch');
 let mainWindow;
 let pythonProcess;
+const SERVER_URL = 'http://127.0.0.1:5000'; // Використовуйте явно IPv4
+
+const { Notification } = require('electron');
+
+ipcMain.handle('show-notification', async (event, title, body) => {
+    // Створюємо сповіщення
+    const notification = new Notification({
+        title: title || 'Solipsist Platform',
+        body: body || 'Оновлення даних',
+        icon: path.join(__dirname, 'assets/icon.png'),
+        silent: false
+    });
+    
+    notification.show();
+    return { success: true };
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -76,6 +92,19 @@ function createMenu() {
       ]
     },
     {
+      label: 'Торгівля',  // ← НОВИЙ РОЗДІЛ
+      submenu: [
+        {
+          label: 'Арбітраж',
+          click: () => mainWindow.loadFile('src/renderer/index.html')
+        },
+        {
+          label: 'Скальпер SOL/USDT',
+          click: () => mainWindow.loadFile('src/renderer/scalper.html')
+        }
+      ]
+    },
+    {
       label: 'Налаштування',
       submenu: [
         {
@@ -111,7 +140,7 @@ function createMenu() {
 // Обробники IPC
 ipcMain.handle('get-arbitrage', async () => {
     try {
-        const response = await fetch('http://localhost:5000/arbitrage');
+        const response = await fetch('http://127.0.0.1:5000/arbitrage');
         return await response.json();
     } catch (error) {
         return { error: error.message };
@@ -127,18 +156,56 @@ ipcMain.handle('load-config', async () => {
     return { theme: 'dark' };
 });
 
-ipcMain.handle('update-arbitrage', async () => {
-  return await fetchPythonAPI('/update', { method: 'POST' });
+ipcMain.handle('refresh-arbitrage', async () => {
+  return await fetchPythonAPI('/arbitrage');
 });
 
 ipcMain.handle('get-exchanges', async () => {
   return await fetchPythonAPI('/exchanges');
 });
 
+// Обробники для скальпера
+ipcMain.handle('scalper-start', async () => {
+    console.log('[IPC] Запуск скальпера');
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/scalper/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
+
+ipcMain.handle('scalper-stop', async () => {
+    console.log('[IPC] Зупинка скальпера');
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/scalper/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
+
+ipcMain.handle('scalper-status', async () => {
+    try {
+        const response = await fetch('http://127.0.0.1:5000/api/scalper/status');
+        return await response.json();
+    } catch (error) {
+        return { status: 'error', message: error.message };
+    }
+});
+
+
+
 // Функція для запитів до Python API
 async function fetchPythonAPI(endpoint, options = {}) {
   try {
-    const response = await fetch(`http://localhost:5000${endpoint}`, {
+    const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
       headers: { 'Content-Type': 'application/json' },
       ...options
     });

@@ -399,3 +399,105 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(26px);
 }
+/* Додаткові стилі для нового UI */
+.spread-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.profit-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.profit-arrow {
+    color: #10b981;
+}
+
+.volume-bars {
+    display: flex;
+    height: 24px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.volume-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: width 0.3s ease;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.buy-volume {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.sell-volume {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.liquidity-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.liquidity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.liquidity-dot.high { background: #22c55e; }
+.liquidity-dot.medium { background: #eab308; }
+.liquidity-dot.low { background: #ef4444; }
+
+.spread-badge.spread-extreme {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: white;
+}
+
+.empty-state, .error-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+.empty-icon, .error-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.retry-btn {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
