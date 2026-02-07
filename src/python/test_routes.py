@@ -1,6 +1,5 @@
-# test_routes.py
-from api_bridge import app
-
-print("Доступні роути:")
-for rule in app.url_map.iter_rules():
-    print(f"  {rule.rule}")
+import market_data
+print('Доступні функції:')
+for item in dir(market_data):
+    if not item.startswith('_'):
+        print(f'  - {item}')
